@@ -3,6 +3,7 @@
 #include "hidden_point_removal.hpp"
 
 #include <opencv2/opencv.hpp>
+#include <chrono>
 
 #undef USE_UNORDERED_MAP
 #include <pcl/kdtree/kdtree_flann.h>
@@ -19,6 +20,8 @@ std::vector<size_t> hidden_point_removal_inliers(typename PointCloudT::Ptr cloud
     using InPointCloudType = typename PointCloudT::Ptr::element_type;
     using InPointType = typename InPointCloudType::PointType;
     using LabelPointType = pcl::PointXYZL;
+
+    auto start_time = std::chrono::high_resolution_clock::now();
 
     std::vector<Eigen::Vector3d> spherical_projection;
     pcl::PointCloud<LabelPointType>::Ptr new_cloud_ptr(new pcl::PointCloud<LabelPointType>);
@@ -38,6 +41,10 @@ std::vector<size_t> hidden_point_removal_inliers(typename PointCloudT::Ptr cloud
     spherical_projection.push_back(Eigen::Vector3d(0, 0, 0));
     assert(spherical_projection.size() == cloud_ptr->points.size() + 1);
 
+    auto end_projection = std::chrono::high_resolution_clock::now();
+    auto projection_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_projection - start_time);
+    std::cout << "Spherical projection took " << projection_duration.count() << " ms" << std::endl;
+
     // convert to pointcloud for convex hull
     for (size_t idx = 0; idx < spherical_projection.size(); ++idx) {
         Eigen::Vector3d current_vector = spherical_projection.at(idx);
@@ -49,12 +56,18 @@ std::vector<size_t> hidden_point_removal_inliers(typename PointCloudT::Ptr cloud
         new_cloud_ptr->push_back(current_point);
     }
 
+    auto start_convex_hull = std::chrono::high_resolution_clock::now();
+
     // Step 2: perform convex hull of origin + spherical projection
     // all the points that are in the convex hull are visible from origin.
     pcl::PointCloud<LabelPointType>::Ptr cloud_hull(new pcl::PointCloud<LabelPointType>);
     pcl::ConvexHull<LabelPointType> chull;
     chull.setInputCloud(new_cloud_ptr);
     chull.reconstruct(*cloud_hull);
+
+    auto end_convex_hull = std::chrono::high_resolution_clock::now();
+    auto convex_hull_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_convex_hull - start_convex_hull);
+    std::cout << "Convex hull computation took " << convex_hull_duration.count() << " ms" << std::endl;
 
     // Step 3: use original indices to construct visible pointcloud
     std::vector<size_t> visible_indices;
@@ -67,6 +80,11 @@ std::vector<size_t> hidden_point_removal_inliers(typename PointCloudT::Ptr cloud
 
         visible_indices.push_back(point_index);
     }
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    std::cout << "Total hidden point removal took " << total_duration.count() << " ms" << std::endl;
+    std::cout << "Number of visible points: " << visible_indices.size() << " out of " << cloud_ptr->points.size() << std::endl;
 
     return visible_indices;
 }
