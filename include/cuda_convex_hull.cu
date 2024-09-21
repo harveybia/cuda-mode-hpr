@@ -50,7 +50,23 @@ namespace cuda
         input_cloud_ = cloud;
         input_size_ = cloud->size();
         allocateDeviceMemory();
+
+        cudaEvent_t start, stop;
+        float milliseconds = 0;
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+
+        cudaEventRecord(start);
+        
         copyInputToDevice();
+        
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&milliseconds, start, stop);
+        printf("--- Time to copy input data to device: %.3f ms\n", milliseconds);
+
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
     }
 
     template <typename PointT>
@@ -68,12 +84,25 @@ namespace cuda
     template <typename PointT>
     void ConvexHull<PointT>::reconstruct(pcl::PointCloud<PointT> &output)
     {
+        cudaEvent_t start, stop;
+        float milliseconds = 0;
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+
         // Allocate device memory for output size
         size_t *d_output_size;
         cudaMalloc(&d_output_size, sizeof(size_t));
 
+        // Timing for kernel execution
+        cudaEventRecord(start);
+        
         // Launch the kernel using the host function
         launchConvexHullKernel(d_input_cloud_, d_output_cloud_, d_hull_indices_, input_size_, d_output_size);
+        
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&milliseconds, start, stop);
+        printf("--- Kernel execution time: %.3f ms\n", milliseconds);
 
         // Copy the output size back to host
         cudaMemcpy(&output_size_, d_output_size, sizeof(size_t), cudaMemcpyDeviceToHost);
@@ -81,8 +110,16 @@ namespace cuda
         // Free the device memory for output size
         cudaFree(d_output_size);
 
+        // Timing for copying results back to host
+        cudaEventRecord(start);
+        
         // Copy the results back to the host
         copyOutputFromDevice(output);
+        
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&milliseconds, start, stop);
+        printf("--- Time to copy results back to host: %.3f ms\n", milliseconds);
 
         // Compute area and volume if requested (not implemented in this example)
         if (compute_area_)
@@ -90,6 +127,9 @@ namespace cuda
             total_area_ = 0.0;
             total_volume_ = 0.0;
         }
+
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
     }
 
     // ... (rest of the implementation remains the same)
@@ -145,11 +185,6 @@ namespace cuda
     template <typename PointT>
     void ConvexHull<PointT>::copyOutputFromDevice(pcl::PointCloud<PointT> &output)
     {
-        printf("Entering copyOutputFromDevice\n");
-        printf("d_input_cloud_: %s\n", (d_input_cloud_ ? "valid" : "null"));
-        printf("d_output_cloud_: %s\n", (d_output_cloud_ ? "valid" : "null"));
-        printf("output_size_: %zu\n", output_size_);
-
         if (d_output_cloud_ && output_size_ > 0)
         {
             printf("Resizing output to %zu points\n", output_size_);
