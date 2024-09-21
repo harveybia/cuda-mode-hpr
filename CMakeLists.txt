@@ -12,6 +12,9 @@ find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
 find_package(CUDA REQUIRED)
 
+# Include CUDA CMake utilities
+include(FindCUDA)
+
 # Include directories
 include_directories(
     ${OpenCV_INCLUDE_DIRS}
@@ -21,33 +24,35 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# Add executable
-add_executable(cuda_mode_hpr
-    include/hidden_point_removal_impl.hpp
-    include/hidden_point_removal.hpp
-    # include/cuda_convex_hull.hpp
-    # include/cuda_convex_hull.cu
-    src/entrypoint.cpp
+# CUDA library
+cuda_add_library(cuda_convex_hull
+    include/cuda_convex_hull.cu
 )
 
-# Set source file properties
-set_source_files_properties(src/cuda_convex_hull.cu PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ)
+# Set CUDA flags
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3;-use_fast_math)
+
+# Set CUDA architectures (adjust as needed)
+set_target_properties(cuda_convex_hull PROPERTIES
+    CUDA_ARCHITECTURES "60;70;75;80"
+)
+
+# Main executable
+cuda_add_executable(cuda_mode_hpr
+    src/entrypoint.cpp
+    include/hidden_point_removal_impl.hpp
+    include/hidden_point_removal.hpp
+    include/cuda_convex_hull.hpp
+)
 
 # Link libraries
 target_link_libraries(cuda_mode_hpr
+    cuda_convex_hull
     ${OpenCV_LIBS}
     ${PCL_LIBRARIES}
     ${CUDA_LIBRARIES}
     Eigen3::Eigen
 )
 
-# Set CUDA architectures (adjust as needed)
-set_target_properties(cuda_mode_hpr PROPERTIES
-    CUDA_ARCHITECTURES "60;70;75;80"
-)
-
 # Enable CUDA separate compilation
 set_property(TARGET cuda_mode_hpr PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-
-# Set CUDA flags
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3;-use_fast_math)

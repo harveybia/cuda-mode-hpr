@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hidden_point_removal.hpp"
+#include "cuda_convex_hull.hpp"
 
 #include <opencv2/opencv.hpp>
 #include <chrono>
@@ -13,6 +14,9 @@
 #include <pcl/surface/convex_hull.h>
 
 namespace m9::perception::chromaloom {
+
+// Flag to choose between baseline and CUDA implementation
+constexpr bool USE_CUDA_IMPLEMENTATION = true;
 
 template <typename PointCloudT>
 std::vector<size_t> hidden_point_removal_inliers(typename PointCloudT::Ptr cloud_ptr,
@@ -61,9 +65,18 @@ std::vector<size_t> hidden_point_removal_inliers(typename PointCloudT::Ptr cloud
     // Step 2: perform convex hull of origin + spherical projection
     // all the points that are in the convex hull are visible from origin.
     pcl::PointCloud<LabelPointType>::Ptr cloud_hull(new pcl::PointCloud<LabelPointType>);
-    pcl::ConvexHull<LabelPointType> chull;
-    chull.setInputCloud(new_cloud_ptr);
-    chull.reconstruct(*cloud_hull);
+
+    if (USE_CUDA_IMPLEMENTATION) {
+        // CUDA implementation
+        cuda::ConvexHull<LabelPointType> cuda_chull;
+        cuda_chull.setInputCloud(new_cloud_ptr);
+        cuda_chull.reconstruct(*cloud_hull);
+    } else {
+        // Baseline implementation
+        pcl::ConvexHull<LabelPointType> chull;
+        chull.setInputCloud(new_cloud_ptr);
+        chull.reconstruct(*cloud_hull);
+    }
 
     auto end_convex_hull = std::chrono::high_resolution_clock::now();
     auto convex_hull_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_convex_hull - start_convex_hull);

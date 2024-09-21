@@ -19,7 +19,6 @@ namespace cuda
         void setComputeAreaVolume(bool compute);
 
         void reconstruct(pcl::PointCloud<PointT> &output);
-        void reconstruct(pcl::PointCloud<PointT> &output, std::vector<pcl::Vertices> &polygons);
 
         double getTotalArea() const;
         double getTotalVolume() const;
@@ -46,5 +45,7 @@ namespace cuda
 
 } // namespace cuda
 
-// Include the implementation
+// Instead of including the .cu file, declare that the implementation will be provided elsewhere
+#ifdef __CUDACC__
 #include "cuda_convex_hull.cu"
+#endif

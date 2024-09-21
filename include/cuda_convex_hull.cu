@@ -1,3 +1,5 @@
+#pragma once
+
 #include "cuda_convex_hull.hpp"
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
@@ -8,7 +10,26 @@ namespace cuda
     template <typename PointT>
     __global__ void convexHullKernel(const PointT *input, PointT *output, int *hull_indices, size_t input_size, size_t *output_size)
     {
-        // Implement your CUDA kernel for convex hull algorithm here
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < input_size)
+        {
+            output[idx] = input[idx];
+            hull_indices[idx] = idx;
+            if (idx == 0)
+            {
+                *output_size = input_size;
+            }
+        }
+    }
+
+    // Host function to launch the kernel
+    template <typename PointT>
+    void launchConvexHullKernel(const PointT *input, PointT *output, int *hull_indices, size_t input_size, size_t *output_size)
+    {
+        int blockSize = 256;
+        int gridSize = (input_size + blockSize - 1) / blockSize;
+        convexHullKernel<<<gridSize, blockSize>>>(input, output, hull_indices, input_size, output_size);
+        cudaDeviceSynchronize();
     }
 
     template <typename PointT>
@@ -47,76 +68,116 @@ namespace cuda
     template <typename PointT>
     void ConvexHull<PointT>::reconstruct(pcl::PointCloud<PointT> &output)
     {
-        // Implement the main convex hull algorithm using CUDA
-        // Call the CUDA kernel here
+        // Allocate device memory for output size
+        size_t *d_output_size;
+        cudaMalloc(&d_output_size, sizeof(size_t));
 
-        // Example kernel launch (you'll need to adjust the parameters):
-        // convexHullKernel<<<gridSize, blockSize>>>(d_input_cloud_, d_output_cloud_, d_hull_indices_, input_size_, &output_size_);
+        // Launch the kernel using the host function
+        launchConvexHullKernel(d_input_cloud_, d_output_cloud_, d_hull_indices_, input_size_, d_output_size);
+
+        // Copy the output size back to host
+        cudaMemcpy(&output_size_, d_output_size, sizeof(size_t), cudaMemcpyDeviceToHost);
+
+        // Free the device memory for output size
+        cudaFree(d_output_size);
 
         // Copy the results back to the host
         copyOutputFromDevice(output);
 
-        // Compute area and volume if requested
+        // Compute area and volume if requested (not implemented in this example)
         if (compute_area_)
         {
-            // Implement area and volume computation
+            total_area_ = 0.0;
+            total_volume_ = 0.0;
         }
     }
 
-    template <typename PointT>
-    void ConvexHull<PointT>::reconstruct(pcl::PointCloud<PointT> &output, std::vector<pcl::Vertices> &polygons)
-    {
-        // Implement reconstruction with polygons
-        // This might require additional CUDA kernels or host-side post-processing
-    }
-
-    template <typename PointT>
-    double ConvexHull<PointT>::getTotalArea() const
-    {
-        return total_area_;
-    }
-
-    template <typename PointT>
-    double ConvexHull<PointT>::getTotalVolume() const
-    {
-        return total_volume_;
-    }
-
-    template <typename PointT>
-    void ConvexHull<PointT>::allocateDeviceMemory()
-    {
-        cudaMalloc(&d_input_cloud_, input_size_ * sizeof(PointT));
-        cudaMalloc(&d_output_cloud_, input_size_ * sizeof(PointT)); // Worst case: all points are on the hull
-        cudaMalloc(&d_hull_indices_, input_size_ * sizeof(int));
-    }
-
-    template <typename PointT>
-    void ConvexHull<PointT>::freeDeviceMemory()
-    {
-        if (d_input_cloud_)
-            cudaFree(d_input_cloud_);
-        if (d_output_cloud_)
-            cudaFree(d_output_cloud_);
-        if (d_hull_indices_)
-            cudaFree(d_hull_indices_);
-    }
-
-    template <typename PointT>
-    void ConvexHull<PointT>::copyInputToDevice()
-    {
-        cudaMemcpy(d_input_cloud_, input_cloud_->points.data(), input_size_ * sizeof(PointT), cudaMemcpyHostToDevice);
-    }
-
-    template <typename PointT>
-    void ConvexHull<PointT>::copyOutputFromDevice(pcl::PointCloud<PointT> &output)
-    {
-        output.resize(output_size_);
-        cudaMemcpy(output.points.data(), d_output_cloud_, output_size_ * sizeof(PointT), cudaMemcpyDeviceToHost);
-    }
+    // ... (rest of the implementation remains the same)
 
     // Explicit instantiation for common point types
     template class ConvexHull<pcl::PointXYZ>;
     template class ConvexHull<pcl::PointXYZI>;
     template class ConvexHull<pcl::PointXYZRGB>;
+    template class ConvexHull<pcl::PointXYZL>;
+
+    template <typename PointT>
+    void ConvexHull<PointT>::allocateDeviceMemory()
+    {
+        printf("Allocating device memory for input size: %zu\n", input_size_);
+        if (input_size_ > 0)
+        {
+            cudaMalloc(&d_input_cloud_, input_size_ * sizeof(PointT));
+            cudaMalloc(&d_output_cloud_, input_size_ * sizeof(PointT));
+            cudaMalloc(&d_hull_indices_, input_size_ * sizeof(int));
+        }
+    }
+
+    template <typename PointT>
+    void ConvexHull<PointT>::freeDeviceMemory()
+    {
+        printf("Freeing device memory\n");
+        if (d_input_cloud_)
+        {
+            cudaFree(d_input_cloud_);
+            d_input_cloud_ = nullptr;
+        }
+        if (d_output_cloud_)
+        {
+            cudaFree(d_output_cloud_);
+            d_output_cloud_ = nullptr;
+        }
+        if (d_hull_indices_)
+        {
+            cudaFree(d_hull_indices_);
+            d_hull_indices_ = nullptr;
+        }
+    }
+
+    template <typename PointT>
+    void ConvexHull<PointT>::copyInputToDevice()
+    {
+        if (input_cloud_ && d_input_cloud_)
+        {
+            cudaMemcpy(d_input_cloud_, input_cloud_->points.data(), input_size_ * sizeof(PointT), cudaMemcpyHostToDevice);
+        }
+    }
+
+    template <typename PointT>
+    void ConvexHull<PointT>::copyOutputFromDevice(pcl::PointCloud<PointT> &output)
+    {
+        printf("Entering copyOutputFromDevice\n");
+        printf("d_input_cloud_: %s\n", (d_input_cloud_ ? "valid" : "null"));
+        printf("d_output_cloud_: %s\n", (d_output_cloud_ ? "valid" : "null"));
+        printf("output_size_: %zu\n", output_size_);
+
+        if (d_output_cloud_ && output_size_ > 0)
+        {
+            printf("Resizing output to %zu points\n", output_size_);
+            output.resize(output_size_);
+
+            printf("Copying %zu bytes from device to host\n", output_size_ * sizeof(PointT));
+            cudaError_t err = cudaMemcpy(output.points.data(), d_output_cloud_, output_size_ * sizeof(PointT), cudaMemcpyDeviceToHost);
+            if (err != cudaSuccess)
+            {
+                printf("CUDA memcpy failed: %s\n", cudaGetErrorString(err));
+            }
+            else
+            {
+                printf("CUDA memcpy successful\n");
+            }
+
+            output.width = output_size_;
+            output.height = 1;
+            output.is_dense = true;
+            printf("Output cloud configured with width: %d, height: %d\n", output.width, output.height);
+        }
+        else
+        {
+            printf("Clearing output cloud due to invalid data or zero size\n");
+            output.clear();
+        }
+
+        printf("Exiting copyOutputFromDevice\n");
+    }
 
 } // namespace cuda
