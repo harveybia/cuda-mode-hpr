@@ -3,6 +3,7 @@
 #include <sstream>
 #include <vector>
 #include <pcl/io/pcd_io.h>
+#include <pcl/io/ply_io.h>
 #include <pcl/point_types.h>
 #include "hidden_point_removal.hpp"
 
@@ -69,7 +70,7 @@ int main(int argc, char **argv)
 
     if (!output_file.empty())
     {
-        pcl::io::savePCDFileBinary(output_file, *result);
+        pcl::io::savePLYFileBinary(output_file, *result);
         std::cout << "Saved result to " << output_file << std::endl;
     }
 

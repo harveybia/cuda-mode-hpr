@@ -2,6 +2,7 @@
 
 #include "hidden_point_removal.hpp"
 #include "cuda_convex_hull.hpp"
+// #include "preprocess.hpp"
 
 #include <opencv2/opencv.hpp>
 #include <chrono>
@@ -47,6 +48,7 @@ std::vector<size_t> hidden_point_removal_inliers(typename PointCloudT::Ptr cloud
 
     auto end_projection = std::chrono::high_resolution_clock::now();
     auto projection_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_projection - start_time);
+    std::cout << "Spherical projection point cloud size " << spherical_projection.size() < std::endl;
     std::cout << "Spherical projection took " << projection_duration.count() << " ms" << std::endl;
 
     // convert to pointcloud for convex hull

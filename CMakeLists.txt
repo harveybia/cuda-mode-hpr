@@ -25,6 +25,10 @@ include_directories(
 )
 
 # CUDA library
+cuda_add_library(cuda_preprocess
+    include/preprocess.cu
+)
+
 cuda_add_library(cuda_convex_hull
     include/cuda_convex_hull.cu
 )
@@ -36,6 +40,9 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3;-use_fast_math)
 set_target_properties(cuda_convex_hull PROPERTIES
     CUDA_ARCHITECTURES "60;70;75;80"
 )
+set_target_properties(cuda_preprocess PROPERTIES
+    CUDA_ARCHITECTURES "60;70;75;80"
+)
 
 # Main executable
 cuda_add_executable(cuda_mode_hpr
@@ -43,11 +50,13 @@ cuda_add_executable(cuda_mode_hpr
     include/hidden_point_removal_impl.hpp
     include/hidden_point_removal.hpp
     include/cuda_convex_hull.hpp
+    include/preprocess.hpp
 )
 
 # Link libraries
 target_link_libraries(cuda_mode_hpr
     cuda_convex_hull
+    cuda_preprocess
     ${OpenCV_LIBS}
     ${PCL_LIBRARIES}
     ${CUDA_LIBRARIES}
