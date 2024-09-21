@@ -21,8 +21,9 @@ include_directories(
 
 # Add executable
 add_executable(cuda_mode_hpr
-    src/hidden_point_removal.cpp
+    include/hidden_point_removal_impl.hpp
     include/hidden_point_removal.hpp
+    src/entrypoint.cpp
 )
 
 # Link libraries

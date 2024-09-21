@@ -23,3 +23,5 @@ typename PointCloudT::Ptr hidden_point_removal(typename PointCloudT::Ptr cloud_p
                                                double radius = 100.);
 
 }  // namespace m9::perception::chromaloom
+
+#include "hidden_point_removal_impl.hpp"
