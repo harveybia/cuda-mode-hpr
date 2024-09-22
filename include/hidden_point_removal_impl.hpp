@@ -2,7 +2,7 @@
 
 #include "hidden_point_removal.hpp"
 #include "cuda_convex_hull.hpp"
-// #include "preprocess.hpp"
+#include "preprocess.hpp"
 
 #include <opencv2/opencv.hpp>
 #include <chrono>
@@ -17,7 +17,7 @@
 namespace m9::perception::chromaloom {
 
 // Flag to choose between baseline and CUDA implementation
-constexpr bool USE_CUDA_IMPLEMENTATION = true;
+constexpr bool USE_CUDA_IMPLEMENTATION = false;
 
 template <typename PointCloudT>
 std::vector<size_t> hidden_point_removal_inliers(typename PointCloudT::Ptr cloud_ptr,
@@ -29,35 +29,55 @@ std::vector<size_t> hidden_point_removal_inliers(typename PointCloudT::Ptr cloud
     auto start_time = std::chrono::high_resolution_clock::now();
 
     std::vector<Eigen::Vector3d> spherical_projection;
-    pcl::PointCloud<LabelPointType>::Ptr new_cloud_ptr(new pcl::PointCloud<LabelPointType>);
+    typename pcl::PointCloud<InPointType>::Ptr spherical_projection_cloud_ptr(new pcl::PointCloud<InPointType>(*cloud_ptr));
 
     // Step 1: perform spherical projection
-    for (size_t idx = 0; idx < cloud_ptr->points.size(); ++idx) {
-        const InPointType current_point = cloud_ptr->points[idx];
-        Eigen::Vector3d current_vector(current_point.x, current_point.y, current_point.z);
-        Eigen::Vector3d projected_point = current_vector - camera_location;
-        double norm = std::max(projected_point.norm(), 0.0001);
+    // for (size_t idx = 0; idx < cloud_ptr->points.size(); ++idx) {
+    //     const InPointType current_point = cloud_ptr->points[idx];
+    //     Eigen::Vector3d current_vector(current_point.x, current_point.y, current_point.z);
+    //     Eigen::Vector3d projected_point = current_vector - camera_location;
+    //     double norm = std::max(projected_point.norm(), 0.0001);
 
-        spherical_projection.push_back(projected_point + 2 * (radius - norm) * projected_point / norm);
-    }
+    //     spherical_projection.push_back(projected_point + 2 * (radius - norm) * projected_point / norm);
+    // }
+
+    // Step 1: GPU version
+    preprocess_reflect<InPointCloudType>(cloud_ptr, camera_location, radius, spherical_projection_cloud_ptr);
+    // add origin to spherical projection
+    size_t origin_idx = spherical_projection_cloud_ptr->size();
+    InPointType origin_point;
+    origin_point.x = 0.0;
+    origin_point.y = 0.0;
+    origin_point.z = 0.0;
+    spherical_projection_cloud_ptr->push_back(origin_point);
 
     // add origin to spherical projection
-    size_t origin_idx = spherical_projection.size();
-    spherical_projection.push_back(Eigen::Vector3d(0, 0, 0));
-    assert(spherical_projection.size() == cloud_ptr->points.size() + 1);
+    // size_t origin_idx = spherical_projection.size();
+    // spherical_projection.push_back(Eigen::Vector3d(0, 0, 0));
+    // assert(spherical_projection.size() == cloud_ptr->points.size() + 1);
 
     auto end_projection = std::chrono::high_resolution_clock::now();
     auto projection_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_projection - start_time);
-    std::cout << "Spherical projection point cloud size " << spherical_projection.size() < std::endl;
     std::cout << "Spherical projection took " << projection_duration.count() << " ms" << std::endl;
 
     // convert to pointcloud for convex hull
-    for (size_t idx = 0; idx < spherical_projection.size(); ++idx) {
-        Eigen::Vector3d current_vector = spherical_projection.at(idx);
+    pcl::PointCloud<LabelPointType>::Ptr new_cloud_ptr(new pcl::PointCloud<LabelPointType>);
+    // for (size_t idx = 0; idx < spherical_projection.size(); ++idx) {
+    //     Eigen::Vector3d current_vector = spherical_projection.at(idx);
+    //     LabelPointType current_point;
+    //     current_point.x = current_vector.x();
+    //     current_point.y = current_vector.y();
+    //     current_point.z = current_vector.z();
+    //     current_point.label = idx;
+    //     new_cloud_ptr->push_back(current_point);
+    // }
+
+    for (size_t idx = 0; idx < spherical_projection_cloud_ptr->size(); ++idx) {
+        const auto point = spherical_projection_cloud_ptr->at(idx);
         LabelPointType current_point;
-        current_point.x = current_vector.x();
-        current_point.y = current_vector.y();
-        current_point.z = current_vector.z();
+        current_point.x = point.x;
+        current_point.y = point.y;
+        current_point.z = point.z;
         current_point.label = idx;
         new_cloud_ptr->push_back(current_point);
     }
